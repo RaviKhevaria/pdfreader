@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>PDF Reader Aloud</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script src="pdf.min.js"></script>
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--text:#1d2330;--muted:#6b7385;--line:#dfe3ea;--accent:#e8590c;--hl:rgba(255,205,0,.5);--pagebg:#e6e9ef}
+[data-theme=dark]{--bg:#14161b;--panel:#1c1f26;--text:#e8eaf0;--muted:#8f97a8;--line:#2b2f39;--accent:#ff8a3d;--hl:rgba(255,196,0,.4);--pagebg:#0f1115}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top)}
+button,select,input{font:inherit;color:inherit}
+header{height:52px;display:flex;align-items:center;gap:10px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line);flex:none}
+.logo{font-weight:700;font-size:15px;white-space:nowrap}.logo b{color:var(--accent)}
+#fname{flex:1;min-width:0;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 14px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.ibtn{width:40px;height:40px;padding:0;display:grid;place-items:center;border-radius:50%;background:transparent;border:1px solid var(--line);font-size:20px;line-height:1}
+#scroll{flex:1;overflow:auto;position:relative;background:var(--pagebg);-webkit-overflow-scrolling:touch}
+#pages{position:relative;min-width:100%;width:max-content;padding:12px 10px 30px}
+.page{position:relative;margin:0 auto 12px;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.page canvas{position:absolute;left:0;top:0;width:100%;height:100%}
+[data-theme=dark] .page canvas{filter:invert(.9) hue-rotate(180deg)}
+.hl{position:absolute;inset:0;pointer-events:none}
+.hl div{position:absolute;background:var(--hl);border-radius:3px;mix-blend-mode:multiply}
+[data-theme=dark] .hl div{mix-blend-mode:normal}
+#welcome{position:absolute;inset:0;display:grid;place-items:center;padding:20px}
+.card{max-width:460px;text-align:center;background:var(--panel);border:2px dashed var(--line);border-radius:18px;padding:34px 24px}
+.card h1{margin:0 0 8px;font-size:22px}
+.card p{margin:0 0 20px;color:var(--muted)}
+.card .btn{font-size:16px;padding:12px 26px}
+.card small{display:block;margin-top:16px;color:var(--muted)}
+#loading{position:absolute;left:0;right:0;top:0;z-index:20;display:none;background:var(--panel);padding:8px 14px;border-bottom:1px solid var(--line)}
+#loading .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}
+#loading .bar i{display:block;height:100%;width:0;background:var(--accent)}
+footer{flex:none;background:var(--panel);border-top:1px solid var(--line);padding:8px 12px calc(8px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:10px}
+.row.center{justify-content:center;gap:18px}
+#play{width:56px;height:56px;border-radius:50%;border:0;background:var(--accent);color:#fff;display:grid;place-items:center}
+#seek{width:100%;accent-color:var(--accent);margin:0}
+.meta{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}
+#pgin{width:48px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 4px;text-align:center}
+select{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;min-width:0}
+#voice{flex:1}
+label.chk{display:flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:170px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:10px;display:none;z-index:60;width:max-content;max-width:90%}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">PDF Reader <b>Aloud</b></div>
+  <div id="fname"></div>
+  <button class="btn primary" id="openbtn">Open</button>
+  <button class="ibtn" id="theme" title="Dark / light">&#9788;</button>
+  <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+</header>
+
+<div id="scroll">
+  <div id="loading"><span id="ltext">Reading PDF...</span><div class="bar"><i id="lbar"></i></div></div>
+  <div id="welcome"><div class="card">
+    <h1>Listen to any PDF</h1>
+    <p>Choose a PDF and it will be read aloud in an Indian English voice while the page follows along.</p>
+    <button class="btn primary" id="openbtn2">Choose a PDF</button>
+    <small>Tip: tap any line in the document to start reading from there.</small>
+  </div></div>
+  <div id="pages"></div>
+</div>
+
+<footer>
+  <div>
+    <input type="range" id="seek" min="0" max="0" value="0">
+    <div class="meta"><span>Page <input id="pgin" type="number" min="1" value="1"> / <span id="ptotal">0</span></span><span id="remain"></span></div>
+  </div>
+  <div class="row center">
+    <button class="ibtn" id="zout">&minus;</button>
+    <button class="ibtn" id="prev"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12L18 6v12z"/></svg></button>
+    <button id="play"></button>
+    <button class="ibtn" id="next"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18V6l8.5 6z"/></svg></button>
+    <button class="ibtn" id="zin">+</button>
+  </div>
+  <div class="row">
+    <select id="voice"><option value="">Indian English (auto)</option></select>
+    <select id="rate">
+      <option value="0.75">0.75x</option><option value="0.9">0.9x</option><option value="1">1x</option>
+      <option value="1.1">1.1x</option><option value="1.25">1.25x</option><option value="1.5">1.5x</option><option value="2">2x</option>
+    </select>
+    <label class="chk"><input type="checkbox" id="follow" checked> Scroll</label>
+  </div>
+</footer>
+<div id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+if (!window.pdfjsLib) { document.body.innerHTML = '<p style="padding:30px">PDF engine missing. Rebuild the app (see README).</p>'; return; }
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+const tts = window.speechSynthesis;
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+const PLAY = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+
+const S = { pages: [], sentences: [], cum: [], total: 0, cur: 0, tok: 0, playing: false,
+  scale: 1, rate: 1, voice: '', follow: true, theme: 'light', loaded: false, lastHl: null, wake: null };
+
+try { const o = JSON.parse(localStorage.getItem('pra') || '{}');
+  if (o.voice) S.voice = o.voice; if (o.rate) S.rate = +o.rate; if (o.theme) S.theme = o.theme;
+  if (typeof o.follow === 'boolean') S.follow = o.follow; } catch (e) {}
+const save = () => { try { localStorage.setItem('pra', JSON.stringify({ voice: S.voice, rate: S.rate, theme: S.theme, follow: S.follow })); } catch (e) {} };
+document.documentElement.dataset.theme = S.theme;
+$('#rate').value = String(S.rate); $('#follow').checked = S.follow; $('#play').innerHTML = PLAY;
+
+function toast(msg, ms = 4500) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = 'none', ms); }
+
+// ---- voices (the phone's own text-to-speech, English India) ----
+function fillVoices() {
+  const vs = (tts.getVoices() || []).filter(v => /^en[-_]IN$/i.test(v.lang));
+  const sel = $('#voice'); sel.innerHTML = '<option value="">Indian English (auto)</option>';
+  vs.forEach(v => { const o = document.createElement('option'); o.value = v.name; o.textContent = v.name + ' (' + v.lang + ')'; sel.appendChild(o); });
+  sel.value = S.voice; if (sel.value !== S.voice) sel.value = '';
+}
+if (tts) { tts.onvoiceschanged = fillVoices; fillVoices(); }
+
+// ---- opening ----
+$('#openbtn').onclick = $('#openbtn2').onclick = () => $('#file').click();
+$('#file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; };
+
+function extract(tc) {
+  const raw = tc.items.filter(i => 'str' in i), items = [], ranges = []; let text = '';
+  for (let k = 0; k < raw.length; k++) {
+    const it = raw[k]; let str = it.str;
+    if (str === '') { if (it.hasEOL && text && !text.endsWith(' ')) text += ' '; continue; }
+    let dehyph = false;
+    if (it.hasEOL && /\w-$/.test(str)) { str = str.slice(0, -1); dehyph = true; }
+    const s = text.length; text += str;
+    items.push({ t: it.transform, w: it.width, h: it.height || 10 }); ranges.push([s, text.length]);
+    if (dehyph) continue;
+    if (it.hasEOL) text += ' ';
+    else { const nx = raw[k + 1];
+      if (nx && nx.str !== '') {
+        const gap = nx.transform[4] - (it.transform[4] + it.width), same = Math.abs(nx.transform[5] - it.transform[5]) < 2;
+        if ((!same || gap > 0.15 * (it.height || 10)) && !text.endsWith(' ') && !nx.str.startsWith(' ')) text += ' ';
+      } }
+  }
+  return { items, ranges, text };
+}
+function sentencesOf(text) {
+  const re = /[\s\S]+?[.!?]+["'”’)\]]*(?=\s|$)|[\s\S]+$/g, segs = []; let m;
+  while ((m = re.exec(text))) {
+    const r = m[0], lead = r.length - r.trimStart().length, t = r.trim();
+    if (!/[\p{L}\p{N}]/u.test(t)) continue;
+    segs.push({ t, s: m.index + lead, e: m.index + r.length });
+  }
+  const out = [];
+  for (let i = 0; i < segs.length; i++) {
+    let c = segs[i];
+    while (c.t.length < 14 && !/[?!]$/.test(c.t) && i < segs.length - 1) { const n = segs[++i]; c = { t: c.t + ' ' + n.t, s: c.s, e: n.e }; }
+    out.push(c);
+  }
+  return out;
+}
+
+async function loadFile(file) {
+  if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') { toast('Please choose a PDF file.'); return; }
+  stopAll(); $('#welcome').style.display = 'none';
+  const L = $('#loading'); L.style.display = 'block'; $('#lbar').style.width = '0'; $('#ltext').textContent = 'Opening...';
+  let doc;
+  try { doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise; }
+  catch (e) { L.style.display = 'none'; $('#welcome').style.display = S.loaded ? 'none' : 'grid';
+    toast(e && e.name === 'PasswordException' ? 'This PDF is password-protected.' : 'Could not open this PDF.'); return; }
+  const host = $('#pages'); host.innerHTML = '';
+  S.pages = []; S.sentences = []; S.cum = []; S.total = 0; S.cur = 0; S.lastHl = null;
+  let first = true;
+  for (let n = 1; n <= doc.numPages; n++) {
+    const pg = await doc.getPage(n), vp = pg.getViewport({ scale: 1 });
+    if (first) { S.scale = Math.max(0.4, Math.min(3, ($('#scroll').clientWidth - 20) / vp.width)); first = false; }
+    const ex = extract(await pg.getTextContent());
+    const div = document.createElement('div'); div.className = 'page'; div.dataset.i = n - 1;
+    div.innerHTML = '<canvas></canvas><div class="hl"></div>'; host.appendChild(div);
+    const p = { n, proxy: pg, w: vp.width, h: vp.height, items: ex.items, div, canvas: div.firstChild, hl: div.lastChild, rendered: 0, busy: false, sentOf: [] };
+    S.pages.push(p);
+    for (const sg of sentencesOf(ex.text)) {
+      const idxs = []; ex.ranges.forEach((r, k) => { if (r[1] > sg.s && r[0] < sg.e) idxs.push(k); });
+      const si = S.sentences.length; S.sentences.push({ text: sg.t, page: n - 1, items: idxs });
+      idxs.forEach(k => { if (p.sentOf[k] === undefined) p.sentOf[k] = si; });
+      S.total += sg.t.length; S.cum.push(S.total);
+    }
+    if (n % 3 === 0 || n === doc.numPages) { $('#lbar').style.width = (100 * n / doc.numPages) + '%'; $('#ltext').textContent = `Reading page ${n} of ${doc.numPages}...`; await new Promise(r => setTimeout(r)); }
+  }
+  L.style.display = 'none'; layoutPages();
+  $('#fname').textContent = file.name; $('#ptotal').textContent = doc.numPages; $('#pgin').max = doc.numPages; S.loaded = true;
+  if (!S.sentences.length) { toast('No readable text found. This looks like a scanned PDF (images only).', 7000); return; }
+  $('#seek').max = S.sentences.length - 1; $('#scroll').scrollTop = 0; setCur(0, false); renderVisible();
+  toast('Ready. Press play, or tap any line to start there.', 3500);
+}
+
+// ---- rendering ----
+function layoutPages() { for (const p of S.pages) { p.div.style.width = p.w * S.scale + 'px'; p.div.style.height = p.h * S.scale + 'px'; } }
+async function renderPage(p) {
+  if (p.busy) return; p.busy = true; const sc = S.scale, vp = p.proxy.getViewport({ scale: sc * dpr }), c = p.canvas;
+  c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+  try { await p.proxy.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise; p.rendered = sc; } catch (e) { p.rendered = 0; }
+  p.busy = false; if (p.rendered && p.rendered !== S.scale) { p.rendered = 0; schedule(); }
+}
+function renderVisible() {
+  const sc = $('#scroll'), top = sc.scrollTop, bot = top + sc.clientHeight, m = sc.clientHeight * 1.0;
+  for (const p of S.pages) {
+    const y = p.div.offsetTop, h = p.div.offsetHeight;
+    if (y + h > top - m && y < bot + m) { if (p.rendered !== S.scale && !p.busy) renderPage(p); }
+    else if (p.rendered && !p.busy && (y + h < top - 2 * m || y > bot + 2 * m)) { p.canvas.width = p.canvas.height = 0; p.rendered = 0; }
+  }
+}
+let raf = 0; const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; renderVisible(); }); };
+$('#scroll').addEventListener('scroll', schedule); addEventListener('resize', schedule);
+function zoom(f) {
+  if (!S.pages.length) return; const sc = $('#scroll'), a = (sc.scrollTop + sc.clientHeight * 0.3) / (sc.scrollHeight || 1);
+  S.scale = Math.max(0.3, Math.min(4, S.scale * f)); layoutPages(); sc.scrollTop = a * sc.scrollHeight - sc.clientHeight * 0.3;
+  if (S.sentences.length) highlight(S.sentences[S.cur]); schedule();
+}
+$('#zin').onclick = () => zoom(1.2); $('#zout').onclick = () => zoom(1 / 1.2);
+
+// ---- highlight ----
+function clearHl() { if (S.lastHl) S.lastHl.hl.innerHTML = ''; S.lastHl = null; }
+function highlight(s) {
+  clearHl(); const p = S.pages[s.page], vp = p.proxy.getViewport({ scale: S.scale });
+  for (const k of s.items) {
+    const it = p.items[k], tx = pdfjsLib.Util.transform(vp.transform, it.t), fh = Math.hypot(tx[2], tx[3]), d = document.createElement('div');
+    d.style.cssText = `left:${tx[4] - 1}px;top:${tx[5] - fh * 0.95}px;width:${it.w * S.scale + 2}px;height:${fh * 1.2}px`; p.hl.appendChild(d);
+  }
+  S.lastHl = p;
+}
+function autoscroll() {
+  if (!S.lastHl) return; const el = S.lastHl.hl.firstElementChild; if (!el) return;
+  const sc = $('#scroll'), r = el.getBoundingClientRect(), sr = sc.getBoundingClientRect(), rel = r.top - sr.top;
+  if (rel < sr.height * 0.08 || rel > sr.height * 0.6) sc.scrollTo({ top: sc.scrollTop + rel - sr.height * 0.3, behavior: 'smooth' });
+}
+function fmt(sec) { sec = Math.max(0, Math.round(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? `${h} h ${m} min` : m ? `${m} min` : `${sec} s`; }
+function setCur(i, scroll = true) {
+  S.cur = i; const s = S.sentences[i]; if (!s) return;
+  $('#seek').value = i; $('#pgin').value = s.page + 1;
+  $('#remain').textContent = `${i + 1}/${S.sentences.length} - ${fmt((S.total - S.cum[i]) / (15 * S.rate))} left`;
+  highlight(s); if (scroll && S.follow) autoscroll();
+}
+
+// ---- speech ----
+function speakOne(text, tok) {
+  return new Promise(res => {
+    const u = new SpeechSynthesisUtterance(text); u.lang = 'en-IN'; u.rate = S.rate;
+    if (S.voice) { const v = tts.getVoices().find(v => v.name === S.voice); if (v) u.voice = v; }
+    const t0 = Date.now(); let finished = false;
+    const done = err => { if (finished) return; finished = true; clearTimeout(guard); res(err); };
+    u.onend = () => done(null);
+    u.onerror = ev => done(ev.error === 'canceled' || ev.error === 'interrupted' ? null : (ev.error || 'error'));
+    const guard = setTimeout(() => { tts.cancel(); done(null); }, 6000 + text.length * 150 / S.rate);
+    tts.speak(u);
+  });
+}
+async function wakeLock(on) {
+  try { if (on && navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen'); else if (S.wake) { S.wake.release(); S.wake = null; } } catch (e) {}
+}
+function ui() { $('#play').innerHTML = S.playing ? PAUSE : PLAY; }
+function stopAll() { S.tok++; S.playing = false; if (tts) tts.cancel(); ui(); wakeLock(false); }
+
+async function run(i) {
+  if (!tts) { toast('Text-to-speech is not available on this device.'); return; }
+  const tok = ++S.tok; tts.cancel(); S.playing = true; ui(); wakeLock(true);
+  const N = S.sentences.length;
+  while (i < N && tok === S.tok) {
+    setCur(i);
+    const err = await speakOne(S.sentences[i].text, tok);
+    if (tok !== S.tok) return;
+    if (err) { stopAll(); toast('Speech failed (' + err + '). In Android Settings > Text-to-speech output, choose Google and download English (India).', 9000); return; }
+    i++;
+  }
+  if (tok === S.tok) { stopAll(); if (i >= N) { toast('Finished reading.'); setCur(0, false); } }
+}
+
+// ---- controls ----
+function toggle() { if (!S.sentences.length) { $('#file').click(); return; } if (S.playing) stopAll(); else run(S.cur); }
+function jump(i) { i = Math.max(0, Math.min(S.sentences.length - 1, i)); if (S.playing) run(i); else setCur(i); }
+$('#play').onclick = toggle;
+$('#prev').onclick = () => S.sentences.length && jump(S.cur - 1);
+$('#next').onclick = () => S.sentences.length && jump(S.cur + 1);
+$('#seek').oninput = e => { const s = S.sentences[+e.target.value]; if (s) $('#pgin').value = s.page + 1; };
+$('#seek').onchange = e => jump(+e.target.value);
+$('#pgin').onchange = e => {
+  if (!S.pages.length) return; const n = Math.max(1, Math.min(S.pages.length, +e.target.value || 1)) - 1;
+  $('#scroll').scrollTo({ top: S.pages[n].div.offsetTop - 8 });
+  let i = S.sentences.findIndex(s => s.page >= n); if (i < 0) i = S.sentences.length - 1; S.playing ? run(i) : setCur(i, false);
+};
+$('#voice').onchange = e => { S.voice = e.target.value; save(); if (S.playing) run(S.cur); };
+$('#rate').onchange = e => { S.rate = +e.target.value; save(); if (S.playing) run(S.cur); else if (S.sentences.length) setCur(S.cur, false); };
+$('#follow').onchange = e => { S.follow = e.target.checked; save(); if (S.follow) autoscroll(); };
+$('#theme').onclick = () => { S.theme = S.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = S.theme; save(); };
+
+// tap a line = start reading there
+$('#pages').addEventListener('click', e => {
+  const div = e.target.closest('.page'); if (!div) return;
+  const p = S.pages[+div.dataset.i], b = div.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+  const vp = p.proxy.getViewport({ scale: S.scale }); let best = -1, bd = 1e9;
+  p.items.forEach((it, k) => {
+    if (p.sentOf[k] === undefined) return;
+    const tx = pdfjsLib.Util.transform(vp.transform, it.t), fh = Math.hypot(tx[2], tx[3]), x2 = tx[4] + it.w * S.scale;
+    const dx = x < tx[4] ? tx[4] - x : x > x2 ? x - x2 : 0, dy = y < tx[5] - fh ? tx[5] - fh - y : y > tx[5] + fh * 0.25 ? y - tx[5] - fh * 0.25 : 0;
+    const d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = k; }
+  });
+  if (best >= 0 && bd < 50) run(p.sentOf[best]);
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.playing) wakeLock(true); });
+})();
+</script>
+</body>
+</html>
